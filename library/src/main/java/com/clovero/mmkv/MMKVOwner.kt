@@ -10,7 +10,7 @@ interface MMKVOwner {
     val mmkv: MMKV
 }
 
-class DefaultMMKVOwner(override val mmkv: MMKV) : MMKVOwner
+open class DefaultMMKVOwner(override val mmkv: MMKV) : MMKVOwner
 
 fun MMKV.toMMKVOwner(): MMKVOwner {
     return DefaultMMKVOwner(this)
