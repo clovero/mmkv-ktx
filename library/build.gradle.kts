@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.kotlinAndroid)
-    //`maven-publish`
+    `maven-publish`
 }
 
 android {
@@ -41,13 +41,14 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }
 
-//afterEvaluate {
-//    publishing {
-//        publications {
-//            create<MavenPublication>("release") {
-//                artifactId = "mmkv-ktx"
-//                version = "1.0"
-//            }
-//        }
-//    }
-//}
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                artifactId = "mmkv-ktx"
+                version = "1.0"
+                from(components["release"])
+            }
+        }
+    }
+}

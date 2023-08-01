@@ -5,6 +5,6 @@ plugins {
     //id("com.diffplug.spotless") version "6.20.0"
 }
 
-//allprojects {
-//    group = "com.github.clovero"
-//}
+allprojects {
+    group = "com.github.clovero"
+}
