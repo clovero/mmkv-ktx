@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.kotlinAndroid)
+    `maven-publish`
 }
 
 android {
@@ -38,4 +39,15 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     api("com.tencent:mmkv:1.3.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                artifactId = "mmkv-ktx"
+                version = "1.0"
+            }
+        }
+    }
 }
