@@ -2,6 +2,7 @@ package com.clovero.mmkv
 
 import com.tencent.mmkv.MMKV
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.properties.Delegates
 import kotlin.properties.ReadOnlyProperty
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
@@ -60,58 +61,64 @@ fun MMKVOwner.stringSetValue(default: String, key: String? = null): MMKVProperty
     return MMKVProperty({ mmkv.decodeString(it) ?: default }, mmkv::encode, key)
 }
 
-private class MMKVStateFlowProperty<T>(
-    private val mmkvProperty: MMKVProperty<T>,
-) : ReadOnlyProperty<MMKVOwner, MutableStateFlow<T>> {
-    private lateinit var _value: MutableStateFlow<T>
+fun <T> MMKVProperty<T>.asMutableStateFlow(): ReadOnlyProperty<MMKVOwner, MutableStateFlow<T>> {
+    return object : ReadOnlyProperty<MMKVOwner, MutableStateFlow<T>> {
 
-    private var lock = this
+        private lateinit var _value: MutableStateFlow<T>
 
-    override fun getValue(thisRef: MMKVOwner, property: KProperty<*>): MutableStateFlow<T> {
-        if (::_value.isInitialized) {
-            return _value
-        }
-        return synchronized(lock) {
+        private val mmkvProperty = this@asMutableStateFlow
+
+        private var lock = this
+
+        override fun getValue(thisRef: MMKVOwner, property: KProperty<*>): MutableStateFlow<T> {
             if (::_value.isInitialized) {
-                _value
-            } else {
-                val v = createMutableStateFlow(thisRef, property)
-                _value = v
-                v
+                return _value
+            }
+            return synchronized(lock) {
+                if (::_value.isInitialized) {
+                    _value
+                } else {
+                    MutableStateFlow(mmkvProperty.getValue(thisRef, property)).let { state ->
+                        object : MutableStateFlow<T> by state {
+                            override var value: T
+                                get() = mmkvProperty.getValue(thisRef, property)
+                                set(value) {
+                                    mmkvProperty.setValue(thisRef, property, value)
+                                    state.value = value
+                                }
+                        }
+                    }.also {
+                        _value = it
+                    }
+                }
             }
         }
     }
+}
 
-    private fun createMutableStateFlow(
-        thisRef: MMKVOwner,
-        property: KProperty<*>
-    ): MutableStateFlow<T> {
-        val state = MutableStateFlow(mmkvProperty.getValue(thisRef, property))
-        return object : MutableStateFlow<T> by state {
-            override var value: T
-                get() = mmkvProperty.getValue(thisRef, property)
-                set(value) {
-                    mmkvProperty.setValue(thisRef, property, value)
-                    state.value = value
-                }
-        }
+interface MMKVProperty<V> : ReadWriteProperty<MMKVOwner, V>
+
+inline fun <reified T> MMKVProperty(
+    crossinline decode: (String) -> T,
+    crossinline encode: (String, T) -> Boolean,
+    key: String? = null
+): MMKVProperty<T> = object : MMKVProperty<T> {
+    override fun getValue(thisRef: MMKVOwner, property: KProperty<*>): T {
+        return decode(key ?: property.name)
     }
-}
 
-fun <T> MMKVProperty<T>.asMutableStateFlow(): ReadOnlyProperty<MMKVOwner, MutableStateFlow<T>> {
-    return MMKVStateFlowProperty(this)
-}
-
-class MMKVProperty<V>(
-    private val decode: (String) -> V,
-    private val encode: (String, V) -> Boolean,
-    private var key: String? = null
-) : ReadWriteProperty<MMKVOwner, V> {
-
-    override fun getValue(thisRef: MMKVOwner, property: KProperty<*>): V =
-        decode(key ?: property.name)
-
-    override fun setValue(thisRef: MMKVOwner, property: KProperty<*>, value: V) {
+    override fun setValue(thisRef: MMKVOwner, property: KProperty<*>, value: T) {
         encode((key ?: property.name), value)
     }
 }
+
+fun <T, V> MMKVProperty<T>.map(convert: (T) -> V, revert: (V) -> T): MMKVProperty<V> =
+    object : MMKVProperty<V> {
+        override fun getValue(thisRef: MMKVOwner, property: KProperty<*>): V {
+            return convert(this@map.getValue(thisRef, property))
+        }
+
+        override fun setValue(thisRef: MMKVOwner, property: KProperty<*>, value: V) {
+            this@map.setValue(thisRef, property, revert(value))
+        }
+    }
